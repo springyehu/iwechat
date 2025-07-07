@@ -41,6 +41,8 @@ jobs:
           registry: docker.cnb.cool
           username: cnb # 根据您的要求，使用固定的用户名 'cnb'
           password: ${{ secrets.CNB_DOCKER_TOKEN }} # 从仓库 Secrets 中获取名为 CNB_DOCKER_TOKEN 的访问令牌
+      - name: Login to cnb Docker Registry
+        run: docker login docker.cnb.cool -u cnb -p ${{ secrets.CNB_DOCKER_TOKEN }}
 
       # 步骤 6: 构建并推送多架构 Docker 镜像
       - name: Build and push Docker image
