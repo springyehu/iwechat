@@ -1,35 +1,48 @@
+# 工作流名称
 name: Build and Push Multi-Arch Docker Image
 
+# 触发条件
 on:
   push:
-    branches: [ "main" ] # 或者您希望触发构建的分支
-  workflow_dispatch: # 允许手动触发
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-and-push:
+    name: Build and Push Image
     runs-on: ubuntu-latest
+    
+    # 授权 GITHUB_TOKEN 以便可以推送到 GHCR
+    permissions:
+      contents: read
+      packages: write # 推送到 GHCR 需要这个权限
+
     steps:
-      # 1. 检出您自己的仓库（包含 Dockerfile 和 scripts）
+      # 1. 检出您的 Action 仓库
       - name: Checkout your repository
         uses: actions/checkout@v4
 
-      # 2. 克隆 iwechat 仓库到名为 iwechat_source 的子目录
+      # 2. 克隆 iwechat 源码仓库
       - name: Clone iwechat repository
-        run: git clone https://github.com/iwechatcom/iwechat.git iwechat_source
+        uses: actions/checkout@v4
+        with:
+          repository: iwechatcom/iwechat
+          path: iwechat_source
 
-      # 3. 将您的构建文件复制到 iwechat_source 目录中，准备构建上下文
+      # 3. 准备构建上下文
       - name: Prepare build context
         run: |
           cp ./Dockerfile ./iwechat_source/Dockerfile
           mkdir -p ./iwechat_source/scripts
           cp ./docker-entrypoint.sh ./iwechat_source/scripts/docker-entrypoint.sh
 
-      # 4. 设置 QEMU 以支持多平台构建
+      # 4. 设置 QEMU
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       # 5. 设置 Docker Buildx
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v3
 
       # 6. 登录到 Docker Hub
@@ -39,16 +52,36 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 7. 构建并推送镜像
+      # 7. 登录到 GitHub Container Registry (GHCR)
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 8. 动态生成 Docker 镜像元数据 (标签和名称)
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # 直接硬编码两个镜像仓库的完整名称
+          images: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/iwechat
+            ghcr.io/${{ github.repository_owner }}/iwechat
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=,format=short
+
+      # 9. 构建并推送到多个仓库
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          # 构建上下文设置为克隆下来的 iwechat 目录
           context: ./iwechat_source
-          # Dockerfile 位于上下文的根目录
           file: ./iwechat_source/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
-          # *** 关键修正：动态生成镜像标签 ***
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/iwechat:arm64
-          # 定义目标平台，一次性构建 ARM 和 AMD 架构
-          platforms: linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
