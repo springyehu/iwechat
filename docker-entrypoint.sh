@@ -1,50 +1,51 @@
 #!/bin/sh
-# 使用 /bin/sh，因为 Alpine 默认不安装 bash
-set -e
+set -e # 如果任何命令失败，立即退出脚本
 
 # 检查 MariaDB 数据目录是否已初始化
-if [ -d "/var/lib/mysql/mysql" ]; then
-    echo "MariaDB data directory already exists, skipping initialization."
-else
-    echo "MariaDB data directory not found, initializing database..."
+if [ ! -d "/var/lib/mysql/mysql" ]; then
+    echo "MariaDB data directory not found. Initializing database..."
+    
+    # 初始化数据库。`--user=mysql` 确保文件权限正确
+    mysql_install_db --user=mysql --datadir=/var/lib/mysql
 
-    # Alpine 使用 mariadb-install-db
-    mariadb-install-db --user=mysql --datadir=/var/lib/mysql
-
-    # 在后台启动 MariaDB
-    /usr/bin/mysqld_safe --datadir='/var/lib/mysql' --socket='/var/run/mysqld/mysqld.sock' &
-    MARIADB_PID=$!
-
-    # 等待 MariaDB 准备就绪
-    for i in $(seq 30 -1 0); do
-        if mysqladmin ping -h localhost --socket='/var/run/mysqld/mysqld.sock' > /dev/null 2>&1; then
-            break
+    # 启动一个临时的 MariaDB 服务用于设置密码和数据库
+    mysqld_safe --datadir='/var/lib/mysql' --socket='/var/run/mysqld/mysqld.sock' --user=mysql &
+    
+    # 等待 MariaDB socket 文件出现，表示服务已基本启动
+    timeout=30
+    while [ ! -S /var/run/mysqld/mysqld.sock ]; do
+        if [ "$timeout" -eq 0 ]; then
+            echo "Timed out waiting for MariaDB socket to be created."
+            exit 1
         fi
-        echo 'Waiting for database connection...'
         sleep 1
+        timeout=$((timeout-1))
     done
-    if [ "$i" = 0 ]; then
-        echo >&2 'MariaDB startup failed.'
-        exit 1
+
+    echo "Temporary MariaDB server started. Setting up user and database..."
+
+    # 执行数据库初始化SQL命令
+    # 使用 SET PASSWORD 代替 ALTER USER，兼容性更好
+    # 将所有命令合并到一个 heredoc 中，更高效
+    mysql --socket='/var/run/mysqld/mysqld.sock' <<-EOSQL
+        SET PASSWORD FOR 'root'@'localhost' = PASSWORD('Iwe@12345678');
+        CREATE DATABASE IF NOT EXISTS iwedb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        FLUSH PRIVILEGES;
+EOSQL
+
+    # 关闭临时服务
+    # 使用 mysqladmin shutdown 来安全关闭
+    if ! mysqladmin --socket='/var/run/mysqld/mysqld.sock' -u root -p'Iwe@12345678' shutdown; then
+        echo "Could not shut down temporary MariaDB server. Killing it..."
+        # 如果安全关闭失败，强制杀死进程
+        pkill mysqld
     fi
-
-    echo "Database is up. Setting root password and creating database."
-
-    # 执行数据库设置命令
-    # 注意：Alpine 的 mariadb-client 默认可能需要指定 socket
-    mysql --socket='/var/run/mysqld/mysqld.sock' -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'Iwe@12345678';"
-    mysql --socket='/var/run/mysqld/mysqld.sock' -e "FLUSH PRIVILEGES;"
-    mysql --socket='/var/run/mysqld/mysqld.sock' -u root -p'Iwe@12345678' -e "CREATE DATABASE iwedb;"
 
     echo "Database initialization complete."
-
-    # 停止临时的 MariaDB 服务
-    if ! kill -s TERM "$MARIADB_PID" || ! wait "$MARIADB_PID"; then
-        echo >&2 'Failed to stop temporary MariaDB server.'
-        exit 1
-    fi
-    echo "Temporary MariaDB server stopped."
+else
+    echo "MariaDB data directory already exists. Skipping initialization."
 fi
 
-# 执行传递给此脚本的命令 (即 Dockerfile 中的 CMD)
+# 执行传递给 entrypoint 的原始命令（例如，启动 supervisord）
+echo "Starting main process: $@"
 exec "$@"
