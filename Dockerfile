@@ -1,25 +1,37 @@
-# 使用 Alpine 作为基础镜像，适合多平台构建
+# 阶段 1: 获取 QEMU 静态二进制文件
+# Alpine 镜像本身不含 qemu, 我们需要从其他地方获取或者直接在 Alpine 中安装
+# 这里我们选择在 Alpine 中直接安装
+FROM alpine:latest AS qemu-builder
+RUN apk add --no-cache qemu-x86_64
+
+# --------------------------------------------------
+
+# 阶段 2: 最终的 Alpine 镜像
 FROM alpine:latest
 
-# 设置环境变量，避免交互式提示
-ENV DEBIAN_FRONTEND=noninteractive
+# 从构建器阶段复制 QEMU 静态模拟器
+COPY --from=qemu-builder /usr/bin/qemu-x86_64 /usr/bin/qemu-x86_64-static
 
-# *** 关键修复 ***
-# 1. 移除了多余的 mariadb-client 包，因为它已作为 mariadb 的依赖被自动安装。
-# 2. 在命令末尾增加了清理 apk 缓存的步骤，减小镜像体积。
-RUN apk update && \
-    apk add --no-cache \
-        bash \
-        qemu-user-static \
-        supervisor \
-        redis \
-        mariadb \
-        tzdata && \
-    rm -rf /var/cache/apk/*
+# 安装依赖项
+# Alpine 的包名和 Ubuntu 不同
+# tzdata 用于时区设置
+# redis, supervisor, mariadb, mariadb-client, curl, ca-certificates 是核心服务
+# shadow 用于 useradd/groupadd
+# coreutils 提供 `chown` 等基本命令
+RUN apk add --no-cache \
+    tzdata \
+    redis \
+    supervisor \
+    mariadb \
+    mariadb-client \
+    curl \
+    ca-certificates \
+    shadow \
+    coreutils
 
-# 设置容器时区为上海
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+# 设置时区为亚洲/上海
+RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
 
 # 创建 supervisor 配置目录和主配置文件
 RUN mkdir -p /etc/supervisor/conf.d
