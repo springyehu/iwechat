@@ -1,11 +1,12 @@
 # 使用 Alpine 作为基础镜像，适合多平台构建
-FROM alpine:3.18
+FROM alpine:latest
 
 # 设置环境变量，避免交互式提示
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 安装所有必要的软件包
-# 包括：bash(用于脚本), qemu(运行x86_64程序), supervisor, redis, mariadb, tzdata(时区)
+# *** 关键修复 ***
+# 1. 移除了多余的 mariadb-client 包，因为它已作为 mariadb 的依赖被自动安装。
+# 2. 在命令末尾增加了清理 apk 缓存的步骤，减小镜像体积。
 RUN apk update && \
     apk add --no-cache \
         bash \
@@ -13,8 +14,8 @@ RUN apk update && \
         supervisor \
         redis \
         mariadb \
-        mariadb-client \
-        tzdata
+        tzdata && \
+    rm -rf /var/cache/apk/*
 
 # 设置容器时区为上海
 ENV TZ=Asia/Shanghai
@@ -60,12 +61,12 @@ RUN echo "[program:myapp]" > /etc/supervisor/conf.d/99_myapp.conf && \
 # 设置工作目录
 WORKDIR /app
 
-# *** 关键修改：使用 COPY 并保持原始路径 ***
+# 使用 COPY 并保持原始路径
 COPY myapp /app/myapp
 COPY assets /app/assets
 COPY static /app/static
 
-# 复制入口脚本 (假设它在您仓库的 scripts 目录下)
+# 复制入口脚本
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
 # 赋予入口脚本执行权限
 RUN chmod +x /docker-entrypoint.sh
