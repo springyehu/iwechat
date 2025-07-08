@@ -1,23 +1,10 @@
-FROM alpine:latest AS base-arm64
-
-# 当目标是 armv7 时 (TARGETARCH=arm)，使用 alpine:3.19
-FROM alpine:3.19 AS base-arm
-
-# 这是一个“指针”阶段，它会根据 TARGETARCH 动态地选择上面定义的一个基础镜像。
-FROM base-${TARGETARCH} AS base
-
-# ==============================================================================
-# 阶段 1: QEMU 获取阶段 (关键修改)
-# 这个阶段强制在构建机的原生平台 (BUILDPLATFORM, 在 GitHub Actions 上是 amd64) 上运行。
-# 它的唯一任务就是下载 qemu-x86_64 二进制文件。
-# ==============================================================================
-FROM --platform=$BUILDPLATFORM alpine:latest AS qemu-fetcher
+FROM alpine:latest AS qemu-builder
 RUN apk add --no-cache qemu-x86_64
 
 # --------------------------------------------------
 
 # 阶段 2: 最终的 Alpine 镜像
-FROM base
+FROM alpine:latest
 
 # 从构建器阶段复制 QEMU 静态模拟器
 COPY --from=qemu-builder /usr/bin/qemu-x86_64 /usr/bin/qemu-x86_64-static
