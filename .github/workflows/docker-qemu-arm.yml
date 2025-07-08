@@ -51,12 +51,10 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          # --- 修改点 ---
-          # 指定目标平台为 ARM64 和 ARMv7
-          platforms: linux/arm64,linux/armv7
+          platforms: linux/arm64 # 指定目标平台为 ARM64
           push: true
           # 设置镜像标签，例如: yourname/iwechat:latest, yourname/iwechat:arm-20240101
-          # 这些标签将指向一个包含 arm64 和 armv7 变体的 manifest list
+          # 您可以根据需要自定义标签格式
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/iwechat:latest-arm
             ${{ secrets.DOCKERHUB_USERNAME }}/iwechat:arm-${{ github.run_number }}
