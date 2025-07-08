@@ -1,48 +1,28 @@
-# --------------------------------------------------
-# 阶段 0: 平台基础镜像定义
-#
-# 我们为每个目标架构定义一个基础镜像。
-# buildx 在构建时会自动设置 TARGETARCH 变量。
-# --------------------------------------------------
-
-# 当目标是 arm64 时，使用 alpine:latest
 FROM alpine:latest AS base-arm64
 
-# 当目标是 armv7 (TARGETARCH=arm) 时，使用 alpine:3.19
+# 当目标是 armv7 时 (TARGETARCH=arm)，使用 alpine:3.19
 FROM alpine:3.19 AS base-arm
 
-# --------------------------------------------------
-# 这是一个“指针”阶段，它会根据 TARGETARCH 动态地
-# 选择上面定义的一个基础镜像。
-# 后续的所有阶段都应该 FROM 这个 "base" 阶段。
-# --------------------------------------------------
+# 这是一个“指针”阶段，它会根据 TARGETARCH 动态地选择上面定义的一个基础镜像。
 FROM base-${TARGETARCH} AS base
 
-# ==================================================
-# 从这里开始，是你原来的 Dockerfile 逻辑，
-# 只需要将 "FROM alpine:latest" 修改为 "FROM base"
-# ==================================================
-
-# 阶段 1: 获取 QEMU 静态二进制文件
-# 使用我们上面动态选择的 "base" 镜像
-FROM base AS qemu-builder
-# 注意：qemu-x86_64 仅在 arm64 架构的 alpine 仓库中存在，
-# 在 armv7 中可能不存在或名称不同。如果 armv7 构建失败，
-# 你可能需要为 armv7 安装 qemu-arm-static。
-# 但对于你的 iwechat 场景，这个 qemu 可能是为了在 x86 runner 上运行 arm 代码，
-# 如果 iwechat 本身是 arm 应用，这个 qemu-x86_64 可能不是你想要的。
-# 暂时保持原样，如果出错再调整。
+# ==============================================================================
+# 阶段 1: QEMU 获取阶段 (关键修改)
+# 这个阶段强制在构建机的原生平台 (BUILDPLATFORM, 在 GitHub Actions 上是 amd64) 上运行。
+# 它的唯一任务就是下载 qemu-x86_64 二进制文件。
+# ==============================================================================
+FROM --platform=$BUILDPLATFORM alpine:latest AS qemu-fetcher
 RUN apk add --no-cache qemu-x86_64
 
 # --------------------------------------------------
 
 # 阶段 2: 最终的 Alpine 镜像
-# 再次使用我们动态选择的 "base" 镜像
 FROM base
 
 # 从构建器阶段复制 QEMU 静态模拟器
-# 增加一个检查，如果文件不存在就不复制，避免 armv7 构建失败
 COPY --from=qemu-builder /usr/bin/qemu-x86_64 /usr/bin/qemu-x86_64-static
+
+# --------------------------------------------------
 # 安装依赖项
 # Alpine 的包名和 Ubuntu 不同
 # tzdata 用于时区设置
