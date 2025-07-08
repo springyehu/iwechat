@@ -81,7 +81,9 @@ jobs:
           file: ./iwechat_source/Dockerfile
           platforms: linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/iwechat:arm64
+            ${{ secrets.DOCKERHUB_USERNAME }}/iwechat:sha-${{ steps.sha.outputs.short_sha }}-arm64
           labels: ${{ steps.meta.outputs.labels }}
           #cache-from: type=gha
           #cache-to: type=gha,mode=max
