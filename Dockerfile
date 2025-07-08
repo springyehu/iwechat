@@ -1,17 +1,22 @@
+# 定义一个构建参数，并设置默认值为 alpine:latest
+# 这样在本地直接构建时，行为和原来一样
+ARG BASE_IMAGE=alpine:latest
+
+# --------------------------------------------------
+
 # 阶段 1: 获取 QEMU 静态二进制文件
-# Alpine 镜像本身不含 qemu, 我们需要从其他地方获取或者直接在 Alpine 中安装
-# 这里我们选择在 Alpine 中直接安装
-FROM alpine:latest AS qemu-builder
+# 使用我们定义的变量作为基础镜像
+FROM ${BASE_IMAGE} AS qemu-builder
 RUN apk add --no-cache qemu-x86_64
 
 # --------------------------------------------------
 
 # 阶段 2: 最终的 Alpine 镜像
-FROM alpine:latest
+# 再次使用我们定义的变量作为基础镜像
+FROM ${BASE_IMAGE}
 
 # 从构建器阶段复制 QEMU 静态模拟器
 COPY --from=qemu-builder /usr/bin/qemu-x86_64 /usr/bin/qemu-x86_64-static
-
 # 安装依赖项
 # Alpine 的包名和 Ubuntu 不同
 # tzdata 用于时区设置
