@@ -35,7 +35,7 @@ jobs:
           cp ./Dockerfile ./iwechat_source/Dockerfile
           mkdir -p ./iwechat_source/scripts
           cp ./docker-entrypoint.sh ./iwechat_source/scripts/docker-entrypoint.sh
-          
+          cp ./init_mariadb.sh​​ ./iwechat_source/scripts/init_mariadb.sh​​
       # 4. 获取短 commit SHA (新步骤)
       - name: Get short commit SHA
         id: sha
