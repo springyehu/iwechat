@@ -15,13 +15,13 @@ RUN apk add --no-cache \
     supervisor \
     mariadb \
     mariadb-client \
-    mariadb-server-utils \  # 提供 mysql_install_db 等工具
+    mariadb-server-utils \
     curl \
     ca-certificates \
     shadow \
     coreutils \
-    libc6-compat \        # 解决 musl/glibc 兼容性问题
-    bash                  # 提供更好的脚本支持
+    libc6-compat \
+    bash
 
 # 设置时区为亚洲/上海
 RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
