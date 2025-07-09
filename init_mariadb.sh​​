@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -e
+
+if [ ! -d "/var/lib/mysql/mysql" ]; then
+  echo "Initializing MariaDB database..."
+  
+  # 安装系统数据库
+  mysql_install_db --user=mysql --datadir=/var/lib/mysql
+  
+  # 启动临时服务
+  mysqld_safe --datadir='/var/lib/mysql' --socket='/var/run/mysqld/mysqld.sock' --user=mysql &
+  pid=$!
+  
+  # 等待MySQL套接字创建
+  timeout=30
+  while [ ! -S /var/run/mysqld/mysqld.sock ]; do
+    if [ $timeout -eq 0 ]; then
+      echo "Timeout waiting for MariaDB socket"
+      exit 1
+    fi
+    sleep 1
+    timeout=$((timeout-1))
+  done
+
+  # 设置root密码和创建应用数据库
+  mysql --socket='/var/run/mysqld/mysqld.sock' <<-EOSQL
+    UPDATE mysql.user SET Password=PASSWORD('Iwe@12345678') WHERE User='root';
+    DELETE FROM mysql.user WHERE User='';
+    CREATE DATABASE IF NOT EXISTS iwedb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    FLUSH PRIVILEGES;
+EOSQL
+
+  # 安全关闭临时服务
+  if ! mysqladmin --socket='/var/run/mysqld/mysqld.sock' -u root -pIwe@12345678 shutdown; then
+    echo "WARNING: Could not shut down MariaDB cleanly, killing process"
+    kill -TERM $pid
+    wait $pid
+  fi
+  
+  echo "MariaDB initialization complete"
+else
+  echo "MariaDB already initialized, skipping initialization"
+fi
