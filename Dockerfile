@@ -78,7 +78,7 @@ COPY static /app/static
 
 # 复制入口脚本和数据库初始化脚本
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
-COPY scripts/init_mariadb.sh /init_mariadb.sh  # 新加入的初始化脚本
+COPY scripts/init_mariadb.sh /init_mariadb.sh
 
 # 赋予入口脚本执行权限
 RUN chmod +x /docker-entrypoint.sh /init_mariadb.sh
